@@ -1,0 +1,158 @@
+<!doctype html><html lang=en><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>Stock desk (paper)</title>
+<style>
+:root{color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;font:15px/1.45 system-ui,sans-serif;background:#0e1116;color:#e6e6e6}
+header{padding:12px 16px;background:#161b22;border-bottom:1px solid #222;position:sticky;top:0;z-index:5}
+h1{font-size:16px;margin:0}.muted{color:#8b949e;font-size:12px}
+.paper{background:#1f6feb22;border:1px solid #1f6feb55;color:#79c0ff;border-radius:8px;padding:2px 8px;font-size:12px}
+nav{display:flex;gap:4px;margin-top:10px;flex-wrap:wrap}
+nav button{flex:1;min-width:70px;background:#21262d;color:#c9d1d9;border:1px solid #30363d;border-radius:8px;padding:8px;font-size:13px;cursor:pointer}
+nav button.on{background:#1f6feb;border-color:#1f6feb;color:#fff;font-weight:600}
+.wrap{padding:12px 16px;max-width:900px;margin:0 auto}
+.cards{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+.card{flex:1 1 120px;background:#161b22;border:1px solid #222;border-radius:10px;padding:10px}
+.card b{display:block;font-size:19px}.card span{color:#8b949e;font-size:12px}
+table{width:100%;border-collapse:collapse;margin:8px 0 16px;font-size:13px}
+th,td{text-align:left;padding:6px 7px;border-bottom:1px solid #1d232c;white-space:nowrap}
+th{color:#8b949e;font-weight:600}
+.pos{color:#3fb950}.neg{color:#f85149}.amber{color:#d29922}.blue{color:#79c0ff}
+.tag{font-size:11px;padding:2px 6px;border-radius:6px;background:#21262d}
+.halt{color:#f85149;font-weight:700}
+.section{display:none}.section.on{display:block}
+pre{white-space:pre-wrap;background:#161b22;border:1px solid #222;border-radius:8px;padding:10px;font-size:12px;overflow-x:auto}
+.right{text-align:right}
+</style></head><body>
+<header><div class=wrap style=padding:0>
+<h1>📊 Stock desk <span class=paper>PAPER ONLY</span></h1>
+<div class=muted id=updated>connecting…</div>
+<nav>
+ <button data-t=live class=on>⚡ Live</button>
+ <button data-t=trades>💸 Trades</button>
+ <button data-t=score>🎯 Score</button>
+ <button data-t=swing>📈 Swing</button>
+ <button data-t=portfolio>💼 Portfolio</button>
+ <button data-t=learn>🧠 Learn</button>
+</nav></div></header>
+<div class=wrap>
+ <div id=live class="section on"></div>
+ <div id=trades class=section></div>
+ <div id=score class=section></div>
+ <div id=swing class=section></div>
+ <div id=portfolio class=section></div>
+ <div id=learn class=section></div>
+ <div class=muted>Read-only · active tab refreshes every 3s · all values are simulated</div>
+</div>
+<script>
+const $=s=>document.querySelector(s);
+const inr=n=>n==null?'—':'₹'+Number(n).toLocaleString('en-IN',{maximumFractionDigits:0});
+const pct=n=>n==null?'—':(n>0?'+':'')+Number(n).toFixed(2)+'%';
+const cls=n=>n>0?'pos':(n<0?'neg':'');
+let tab='live';
+async function get(p){try{const r=await fetch(p+'?_='+Date.now());return await r.json();}catch(e){return{error:String(e)};}}
+function un(d){return d&&d.unavailable;}
+
+async function renderLive(){
+ const d=await get('state.json');const el=$('#live');
+ if(un(d)){el.innerHTML='<p class=muted>Intraday loop not running on this host.</p>';return;}
+ $('#updated').textContent=(d.market_open?'🟢 live':'⚪ idle')+' · '+(d.note||'')+' · '+d.updated;
+ let h=`<div class=cards>
+  <div class=card><span>Equity</span><b>${inr(d.equity)}</b></div>
+  <div class=card><span>Realized today</span><b class=${cls(d.realized_today)}>${inr(d.realized_today)}</b></div>
+  <div class=card><span>Trades</span><b>${d.trades_today}/${d.max_trades_per_day}</b></div>
+  <div class=card><span>Square-off</span><b>${d.squareoff_time}</b></div></div>`;
+ if(d.halted)h+='<p class=halt>⛔ HALTED — daily loss cap hit; no new entries.</p>';
+ h+=`<table><thead><tr><th>Symbol<th class=right>Last<th class=right>Day%<th>VWAP<th class=right>%→Break<th class=right>RelVol<th>State</tr></thead><tbody>`;
+ (d.signals||[]).forEach(s=>{
+   const st=s.state||'';
+   let c='';if(st.startsWith('ENTER')||st=='holding')c='blue';else if(st=='BREAKOUT')c='pos';else if(st=='near-trigger')c='amber';else if(st.startsWith('EXIT'))c='neg';
+   const vw=s.vwap==null?'—':(s.vwap+' '+(s.above_vwap?'▲':'▼'));
+   h+=`<tr><td>${s.symbol}<td class=right>${s.last??'—'}<td class="right ${cls(s.day_change_pct)}">${pct(s.day_change_pct)}<td class=${s.above_vwap?'pos':'neg'}>${vw}<td class=right>${pct(s.dist_to_breakout_pct)}<td class=right>${s.relvol??'—'}<td class="${c}">${st}</tr>`;});
+ h+='</tbody></table>';el.innerHTML=h;
+}
+async function renderTrades(){
+ const d=await get('trades.json');const el=$('#trades');
+ if(un(d)){el.innerHTML='<p class=muted>No paper trades logged yet.</p>';return;}
+ const s=d.summary;
+ let h=`<div class=cards>
+  <div class=card><span>Realized</span><b class=${cls(s.realized)}>${inr(s.realized)}</b></div>
+  <div class=card><span>Win rate</span><b>${s.win_rate==null?'—':s.win_rate+'%'}</b></div>
+  <div class=card><span>Closed</span><b>${s.closed}</b></div>
+  <div class=card><span>Brokerage paid</span><b>${inr(s.brokerage_paid)}</b></div></div>`;
+ h+=`<table><thead><tr><th>Time<th>Symbol<th>Side<th class=right>Qty<th class=right>Price<th class=right>P&L<th>Reason</tr></thead><tbody>`;
+ (d.rows||[]).forEach(r=>{const p=r.pnl?Number(r.pnl):null;
+   h+=`<tr><td>${(r.ts||'').slice(11,19)}<td>${r.symbol}<td>${r.side}<td class=right>${r.qty}<td class=right>${r.price}<td class="right ${p==null?'':cls(p)}">${p==null?'':inr(p)}<td>${r.reason||''}</tr>`;});
+ h+='</tbody></table>';el.innerHTML=h;
+}
+async function renderSwing(){
+ const d=await get('screen.json');const el=$('#swing');
+ if(un(d)){el.innerHTML='<p class=muted>No screen report on this host.</p>';return;}
+ let h=`<h3>${d.title||'Latest screen'}</h3>`;
+ h+=`<table><thead><tr><th>#<th>Symbol<th class=right>Score<th class=right>Trend<th class=right>Mom<th class=right>Vol<th class=right>Fund<th class=right>News</tr></thead><tbody>`;
+ (d.picks||[]).forEach(p=>{h+=`<tr><td>${p.rank}<td>${p.symbol}<td class=right>${p.score}<td class=right>${p.trend}<td class=right>${p.mom}<td class=right>${p.vol}<td class=right>${p.fund}<td class=right>${p.news}</tr>`;});
+ h+='</tbody></table>';
+ if(d.scoreboard&&d.scoreboard.length)h+='<h3>Scoreboard</h3><pre>'+d.scoreboard.join('\n').replace(/[<>]/g,'')+'</pre>';
+ el.innerHTML=h;
+}
+function purseHtml(name,p){
+ if(!p)return `<div class=card><span>${name}</span><b class=muted>not on this host</b></div>`;
+ let rows=(p.positions||[]).map(x=>`<tr><td>${x.symbol}<td class=right>${x.qty}<td class=right>${x.entry}<td class=right>${x.stop??'—'}<td class=right>${x.target??'—'}</tr>`).join('')||'<tr><td colspan=5 class=muted>none</td></tr>';
+ return `<h3>${name}</h3><div class=cards>
+   <div class=card><span>Cash</span><b>${inr(p.cash)}</b></div>
+   <div class=card><span>Realized</span><b class=${cls(p.realized)}>${inr(p.realized)}</b></div></div>
+   <table><thead><tr><th>Symbol<th class=right>Qty<th class=right>Entry<th class=right>Stop<th class=right>Target</tr></thead><tbody>${rows}</tbody></table>`;
+}
+async function renderPortfolio(){
+ const d=await get('portfolio.json');const el=$('#portfolio');
+ if(un(d)){el.innerHTML='<p class=muted>No paper purses on this host.</p>';return;}
+ let h=purseHtml('⚡ Intraday purse',d.intraday)+purseHtml('📈 Swing/long-term purse',d.swing);
+ const n=await get('news.json');
+ if(!un(n)&&n.items&&n.items.length){h+='<h3>📰 News sentiment</h3><table><thead><tr><th>Symbol<th class=right>Score<th>Note</tr></thead><tbody>';
+   n.items.forEach(i=>{h+=`<tr><td>${i.symbol}<td class=right>${i.score??'—'}<td>${(i.note||'').replace(/[<>]/g,'')}</tr>`;});h+='</tbody></table>';}
+ el.innerHTML=h;
+}
+async function renderLearn(){
+ const d=await get('learning.json');const el=$('#learn');
+ if(un(d)){el.innerHTML='<p class=muted>Autolearn has not run yet on this host.</p>';return;}
+ let h='<h3>🧠 Autolearn — paper-only, auto-applied, fully logged</h3>'+
+   '<p class=muted>Adjusts signal params only on strong walk-forward evidence; never touches risk caps; auto-reverts bad changes.</p>';
+ const ch=d.champions||{};
+ if(Object.keys(ch).length){h+='<h3>Current learned settings</h3><table><thead><tr><th>Arm<th>Value<th>Since</tr></thead><tbody>';
+   for(const k in ch){const c=ch[k];h+=`<tr><td>${k}<td>${JSON.stringify(c.params||c.weights||c)}<td>${(c.at||'').slice(0,10)}</tr>`;}h+='</tbody></table>';}
+ else h+='<p class=muted>No learned changes yet — it is still gathering evidence (this is expected for weeks).</p>';
+ h+='<h3>Activity log</h3>';
+ if(d.log&&d.log.length){h+='<pre>'+d.log.join('\n').replace(/[<>]/g,'')+'</pre>';}
+ else h+='<p class=muted>No log entries yet.</p>';
+ el.innerHTML=h;
+}
+async function renderScore(){
+ const d=await get('scorecard.json');const el=$('#score');
+ if(un(d)){el.innerHTML='<p class=muted>No trade log on this host.</p>';return;}
+ if(d.empty){el.innerHTML='<p class=muted>No closed trades yet — nothing to score.</p>';return;}
+ const beat=d.beats_cash;
+ let h=`<h3>🎯 Edge scorecard <span class=paper>TRUE net of costs</span></h3>
+  <div class=cards>
+   <div class=card><span>True net (all costs)</span><b class=${cls(d.net_true)}>${inr(d.net_true)}</b></div>
+   <div class=card><span>Per-trade expectancy</span><b class=${cls(d.expectancy)}>${inr(d.expectancy)}</b></div>
+   <div class=card><span>Win rate</span><b>${d.win_rate}%</b></div>
+   <div class=card><span>Worst drawdown</span><b class=neg>${inr(d.drawdown)}</b></div></div>`;
+ h+=`<p class="${beat?'pos':'neg'}">${beat
+   ?'✅ Beating cash — cumulative true net is positive.'
+   :'⚠️ Cash is ahead — sitting flat would have made more so far.'}</p>`;
+ h+=`<p class=muted>Dashboard "Trades" tab shows ${inr(d.net_reported)}; that under-counts costs by
+   ${inr(d.cost_gap)} (the entry-brokerage legs). This tab is the honest figure — and it matches the EOD email.</p>`;
+ if(!d.enough_data)h+=`<p class=amber>📊 ${d.days} day(s) / ${d.trades} trades — a trustworthy read needs
+   ≥${d.min_days} days &amp; ≥${d.min_trades} trades. Until then this is a thermometer, not a verdict. Paper — let it run.</p>`;
+ else h+=`<p class=muted>${d.days} days / ${d.trades} trades — enough to trust the sign above.</p>`;
+ h+=`<table><thead><tr><th>Date<th class=right>Trades<th class=right>True net</tr></thead><tbody>`;
+ (d.per_day||[]).forEach(r=>{h+=`<tr><td>${r.date}<td class=right>${r.trades}<td class="right ${cls(r.net_true)}">${inr(r.net_true)}</tr>`;});
+ h+='</tbody></table>';el.innerHTML=h;
+}
+const R={live:renderLive,trades:renderTrades,score:renderScore,swing:renderSwing,portfolio:renderPortfolio,learn:renderLearn};
+function show(t){tab=t;document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t==t));
+ document.querySelectorAll('.section').forEach(s=>s.classList.toggle('on',s.id==t));R[t]();}
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.t));
+show('live');setInterval(()=>R[tab](),3000);
+</script></body></html>

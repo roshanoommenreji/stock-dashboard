@@ -1,0 +1,16 @@
+{
+  "updated": "2026-07-02T17:26:11+05:30",
+  "market_open": false,
+  "squareoff_time": "15:15",
+  "now": "17:26:11",
+  "cash": 98807.88,
+  "start_capital": 100000.0,
+  "realized_today": -532.56,
+  "trades_today": 15,
+  "max_trades_per_day": 15,
+  "halted": false,
+  "equity": 98807.88,
+  "positions": [],
+  "signals": [],
+  "note": "outside market hours \u2014 idle"
+}

@@ -1,0 +1,1 @@
+{"intraday": {"cash": 98807.88, "start_capital": 100000.0, "realized": -492.51, "positions": []}, "swing": {"cash": 83136.0, "start_capital": 0, "realized": 0, "positions": [{"symbol": "LT", "qty": 4, "entry": 4216.0, "stop": 4095.0, "target": 4460.0}]}}
